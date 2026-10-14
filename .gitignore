@@ -1,2 +1,3 @@
-credentials.yaml
+*.yaml
 *.venv
+/docs/
