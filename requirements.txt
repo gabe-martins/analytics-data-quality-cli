@@ -4,4 +4,5 @@ pyodbc
 oracledb
 pandas
 pyyaml
+mssql-python
 sqlalchemy
