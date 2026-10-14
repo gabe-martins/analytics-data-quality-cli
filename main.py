@@ -194,15 +194,94 @@ def connect(creds):
     return None
 
 
+# ---------------------------------------------------------------- tabelas
+# Cada query retorna duas colunas: (schema, tabela)
+TABLE_QUERIES = {
+    "postgresql": """
+        SELECT table_schema, table_name
+        FROM information_schema.tables
+        WHERE table_type = 'BASE TABLE'
+          AND table_schema NOT IN ('pg_catalog', 'information_schema')
+        ORDER BY table_schema, table_name
+    """,
+    "mysql": """
+        SELECT table_schema, table_name
+        FROM information_schema.tables
+        WHERE table_type = 'BASE TABLE'
+          AND table_schema = DATABASE()
+        ORDER BY table_name
+    """,
+    "mssql": """
+        SELECT table_schema, table_name
+        FROM information_schema.tables
+        WHERE table_type = 'BASE TABLE'
+        ORDER BY table_schema, table_name
+    """,
+    "sqlite": """
+        SELECT '', name
+        FROM sqlite_master
+        WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+        ORDER BY name
+    """,
+    "oracle": """
+        SELECT USER, table_name
+        FROM user_tables
+        ORDER BY table_name
+    """,
+}
+
+
+def qualified_name(schema, table):
+    return f"{schema}.{table}" if schema else table
+
+
+def list_tables(conn, db_type):
+    """Retorna uma lista de tuplas (schema, tabela) do banco conectado."""
+    cursor = conn.cursor()
+    try:
+        cursor.execute(TABLE_QUERIES[db_type])
+        return [(row[0], row[1]) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+
+
+def select_table(conn, creds):
+    """Lista as tabelas e deixa o usuário escolher uma.
+    Retorna (schema, tabela) ou None se não houver escolha."""
+    try:
+        tables = list_tables(conn, creds["type"])
+    except Exception as e:
+        print(f"Could not list tables: {e}")
+        return None
+
+    if not tables:
+        print("\nNo tables found in this database.")
+        return None
+
+    print(f"\nTables ({len(tables)}):")
+    for i, (schema, table) in enumerate(tables, start=1):
+        print(f"{i}. {qualified_name(schema, table)}")
+    print(f"{len(tables) + 1}. Back")
+
+    index = choose_from_list(range(len(tables) + 1))
+    if index == len(tables):
+        return None
+
+    return tables[index]
+
+
 def use_connection(creds):
     conn = connect(creds)
     if conn is None:
         return
 
-    # Aqui você já pode rodar suas queries (mesma API para todos os bancos):
-    # cursor = conn.cursor()
-    # cursor.execute("SELECT ...")
-    # rows = cursor.fetchall()
+    selected = select_table(conn, creds)
+    if selected:
+        print(f"\nSelected table: {qualified_name(*selected)}")
+        # Aqui você já pode trabalhar com a tabela escolhida:
+        # cursor = conn.cursor()
+        # cursor.execute(f"SELECT * FROM {qualified_name(*selected)}")
+        # rows = cursor.fetchall()
 
     conn.close()
 
