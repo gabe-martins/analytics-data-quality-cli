@@ -33,6 +33,62 @@ No menu, escolha uma conexão salva, cadastre uma nova conexão ou abra **Compar
 
 As conexões e os resultados são gravados localmente em `credentials.yaml` e `comparisons.yaml`, respectivamente, no diretório em que o programa é executado.
 
+## Append manual: PostgreSQL → SQL Server
+
+O script independente `sync_append.py` lê o `credentials.yaml` ao lado dele e usa,
+por padrão, `main-db` como origem PostgreSQL e `sql-server` como destino SQL Server.
+Pode ser executado de qualquer diretório. Usa as mesmas dependências do projeto.
+
+```bash
+# Valida todas as tabelas e mostra a ordem, sem gravar dados:
+.venv/bin/python sync_append.py --dry-run
+
+# Executa o append em todas as tabelas da origem:
+.venv/bin/python sync_append.py
+
+# Parâmetros opcionais:
+.venv/bin/python sync_append.py --credentials /caminho/credentials.yaml \
+  --source main-db --target sql-server --batch-size 1000
+```
+
+As tabelas precisam existir no destino. O script procura o mesmo schema/nome;
+na ausência dele, procura um nome de tabela único, ignorando maiúsculas e
+minúsculas (por exemplo, `public.product` → `dbo.Product`). As colunas também são
+associadas por nome. Valida a presença de todas as colunas, a mesma chave primária
+(inclusive composta) e a ordem de dependências antes da primeira inserção.
+Tabelas exclusivas do destino não são copiadas; tabelas sem PK, ausentes ou
+ambíguas no destino e ciclos de FKs, inclusive autorreferências, impedem a execução.
+Partições PostgreSQL são lidas pela tabela pai, evitando cópia em duplicidade.
+
+Insere somente chaves primárias ausentes: uma segunda execução pula registros já
+copiados. Não atualiza nem exclui dados. Uma PK já existente é mantida mesmo que os
+demais valores sejam diferentes; portanto, pressupõe que os IDs representem as
+mesmas entidades nos dois bancos. Preserva valores de identidade usando
+`IDENTITY_INSERT`; colunas calculadas, geradas e `rowversion` do destino são
+regeneradas pelo SQL Server. Requer SELECT na origem, leitura dos catálogos,
+SELECT/INSERT no destino e, para tabelas com identidade, permissão para
+`IDENTITY_INSERT` (proprietário ou ALTER na tabela).
+
+A origem é aberta em uma transação somente leitura com snapshot consistente.
+Um cursor de servidor lê lotes, e as inserções são parametrizadas, por registro.
+O lote limita memória, mas o commit ocorre **por tabela**: uma falha reverte toda a
+tabela em andamento e encerra o processo com código 1; tabelas já concluídas
+permanecem gravadas. É possível repetir o comando depois de corrigir o problema.
+Execute uma instância por vez, preferencialmente em uma janela sem alterações
+concorrentes no destino; tabelas grandes podem manter locks e usar bastante log.
+
+A simulação valida metadados e dependências, sem ler/copiar os registros e sem
+garantir conversões de tipos, regras de negócio ou permissões de inserção.
+Incompatibilidades de tipos, outras constraints UNIQUE, FKs ou triggers podem
+impedir o append real. Não cria tabelas nem faz conversão automática de tipos
+especiais, como arrays/JSON/objetos Python para colunas textuais do SQL Server.
+
+Testes locais (sem acessar os bancos configurados):
+
+```bash
+.venv/bin/python -m unittest test_sync_append.py
+```
+
 ## Documentação técnica
 
 Consulte [TECHNICAL.md](TECHNICAL.md) para detalhes sobre módulos, fluxo de execução, consultas, arquivos locais e limitações da comparação.
