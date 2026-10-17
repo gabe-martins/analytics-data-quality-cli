@@ -7,13 +7,15 @@ from comparison import compare_table_statistics, view_saved_comparison
 from config import load_connections, save_connection
 from database import DB_TYPES, connect
 from tables import qualified_name, select_table, show_table_sample
+from db_adapters import SUPPORTED_DATABASES
 
 def get_database():
-    print("\nSelect a database type:")
-    for i, db_type in enumerate(DB_TYPES, start=1):
+    available = [kind for kind in DB_TYPES if kind in SUPPORTED_DATABASES]
+    print("\nSelecione o banco de dados:")
+    for i, db_type in enumerate(available, start=1):
         print(f"{i}. {db_type}")
 
-    return DB_TYPES[choose_from_list(DB_TYPES)]
+    return available[choose_from_list(available)]
 
 
 def get_db_credentials(db_type):
@@ -92,26 +94,33 @@ def add_new_connection():
 
 
 MENU = (
-    ("Use a saved connection", use_saved_connection),
-    ("Add a new connection", add_new_connection),
-    ("Compare table statistics", compare_table_statistics),
-    ("View saved comparisons", view_saved_comparison),
-    ("Exit", None),
+    ("Usar uma conexão salva", use_saved_connection),
+    ("Cadastrar uma conexão", add_new_connection),
+    ("Comparar duas tabelas", compare_table_statistics),
+    ("Consultar comparações salvas", view_saved_comparison),
+    ("Sair", None),
 )
 
 
-def main():
+def _menu():
     while True:
-        print("\n=== Database Manager ===")
+        print("\n=== Analytics Data Quality ===")
         for i, (label, _) in enumerate(MENU, start=1):
             print(f"{i}. {label}")
 
         _, action = MENU[choose_from_list(MENU)]
         if action is None:
-            print("Bye!")
+            print("Até mais!")
             break
 
         action()
+
+
+def main():
+    try:
+        _menu()
+    except (EOFError, KeyboardInterrupt):
+        print("\nExecução encerrada.")
 
 if __name__ == "__main__":
     main()
